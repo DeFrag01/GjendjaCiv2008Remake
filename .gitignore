@@ -1,4 +1,5 @@
 civil_registry_clean.db
 *.db
+*.db.gz
 __pycache__/
 *.pyc
