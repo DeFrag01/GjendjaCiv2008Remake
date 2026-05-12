@@ -15,7 +15,7 @@ if [ -f "$DB_FILE" ]; then
     echo "Database found."
 elif [ -f "$DB_GZ" ]; then
     echo "Decompressing existing archive..."
-    gunzip -k "$DB_GZ"
+    gunzip "$DB_GZ"
 else
     echo "Downloading database from Google Drive (ID: $FILE_ID)..."
     gdown --id "$FILE_ID" --fuzzy -O "$DB_GZ" || {
@@ -25,9 +25,9 @@ else
             -o "$DB_GZ"
     }
     echo "Decompressing..."
-    gunzip -k "$DB_GZ"
+    gunzip "$DB_GZ"
     echo "Download complete."
 fi
 
 echo "Starting server..."
-python3 server.py
+exec python3 server.py
