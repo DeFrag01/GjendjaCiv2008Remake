@@ -380,7 +380,16 @@ function search(){
   })
 }
 
-function formatDate(d){return d?d.split(' ')[0]||'&mdash;':'&mdash;'}
+function formatDate(d){
+  if(!d)return'&mdash;';
+  const p=d.split(' ');
+  if(!p[0])return'&mdash;';
+  const parts=p[0].split('/');
+  if(parts.length!==3)return p[0];
+  let y=parts[2];
+  if(y.length===2){const n=parseInt(y);y=n>25?'19'+y:'20'+y}
+  return `${parts[0]}/${parts[1]}/${y}`
+}
 
 function tagHtml(l){
   if(!l||l==='&mdash;')return'';
