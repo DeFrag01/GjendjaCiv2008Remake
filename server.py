@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+"""
+Civil Registry Search Server
+Optimized SQLite patterns for high-performance web serving
+"""
 import sqlite3
 import os
 from http.server import HTTPServer, SimpleHTTPRequestHandler
@@ -6,8 +10,9 @@ import json
 from urllib.parse import urlparse, parse_qs
 from contextlib import contextmanager
 
-DB_FILE = os.environ.get('DB_PATH', 'civil_registry_clean.db')
+DB_FILE = "/run/media/defrag01/944CA94F4CA92D44/Users/DeFrag01/Documents/Gjendja Civile 2008/civil_registry_clean.db"
 
+# Singleton connection with proper SQLite patterns
 class ConnectionManager:
     _instance = None
     _conn = None
@@ -17,10 +22,12 @@ class ConnectionManager:
         if cls._conn is None:
             cls._conn = sqlite3.connect(DB_FILE, check_same_thread=False, timeout=30.0)
             cls._conn.row_factory = sqlite3.Row
+            # WAL mode for concurrent reads
             cls._conn.execute("PRAGMA journal_mode=WAL")
-            cls._conn.execute("PRAGMA cache_size=-64000")
+            # Better performance
+            cls._conn.execute("PRAGMA cache_size=-64000")  # 64MB cache
             cls._conn.execute("PRAGMA temp_store=MEMORY")
-            cls._conn.execute("PRAGMA mmap_size=268435456")
+            cls._conn.execute("PRAGMA mmap_size=268435456")  # 256MB memory-mapped I/O
             cls._conn.execute("PRAGMA synchronous=NORMAL")
         return cls._conn
     
@@ -32,11 +39,13 @@ class ConnectionManager:
 
 @contextmanager
 def get_db():
+    """Context manager for database connections - ensures proper cleanup"""
     conn = ConnectionManager.get_connection()
     try:
         yield conn
     except sqlite3.OperationalError as e:
         if "locked" in str(e):
+            # Retry once on lock
             import time
             time.sleep(0.1)
             yield conn
@@ -87,34 +96,24 @@ class CivilRegistryHandler(SimpleHTTPRequestHandler):
             cur = conn.cursor()
             
             if query:
-                words = query.strip().split()
+                term = query.strip()
                 
-                conditions = []
-                params = []
-                for word in words:
-                    term = f'%{word}%'
-                    conditions.append('(l.Emer LIKE ? COLLATE NOCASE OR l.Mbiemer LIKE ? COLLATE NOCASE OR l.Atesi LIKE ? COLLATE NOCASE OR l.KryefId LIKE ? COLLATE NOCASE)')
-                    params.extend([term, term, term, term])
-                
-                where_clause = ' AND '.join(conditions)
-                
-                sql = f'''
+                sql = '''
                     SELECT l.Id, l.Emer, l.Mbiemer, l.Atesi, l.Amesi, l.Dtlindja, l.Vlindja,
                            s.Seksi, g.GjCivile, k.Kombesia, q.Qyteti, li.LidhjaKryef,
                            l.Adresa, l.NrBaneses, l.KryefId, l.EmriRegj, l.NrRegj
-                    FROM tblLista l
+                    FROM tblLista_fts f
+                    JOIN tblLista l ON l.Id = f.rowid
                     LEFT JOIN tblSeksi s ON l.IdSeksi = s.IdSeksi
                     LEFT JOIN tblGjCivile g ON l.IdGjCivile = g.IdGjCivile
                     LEFT JOIN tblKombesia k ON l.IdKombesia = k.IdKombesia
                     LEFT JOIN tblQyteti q ON l.IdQyteti = q.IdQyteti
                     LEFT JOIN tblLidhja li ON l.IdLidhja = li.IdLidhja
-                    WHERE {where_clause}
+                    WHERE tblLista_fts MATCH ?
                     ORDER BY l.Mbiemer COLLATE NOCASE, l.Emer COLLATE NOCASE
                     LIMIT ? OFFSET ?
                 '''
-                params.extend([limit, offset])
-                
-                count_sql = f'SELECT COUNT(*) FROM tblLista l WHERE {where_clause}'
+                params = [term, limit, offset]
             else:
                 sql = '''
                     SELECT l.Id, l.Emer, l.Mbiemer, l.Atesi, l.Amesi, l.Dtlindja, l.Vlindja,
@@ -130,15 +129,14 @@ class CivilRegistryHandler(SimpleHTTPRequestHandler):
                     LIMIT ? OFFSET ?
                 '''
                 params = [limit, offset]
-                count_sql = 'SELECT COUNT(*) FROM tblLista'
             
             cur.execute(sql, params)
             rows = cur.fetchall()
             
             if query:
-                cur.execute(count_sql, params[:-2])
+                cur.execute('SELECT COUNT(*) FROM tblLista_fts WHERE tblLista_fts MATCH ?', (term,))
             else:
-                cur.execute(count_sql)
+                cur.execute('SELECT COUNT(*) FROM tblLista')
             total = cur.fetchone()[0]
             
             results = [{
@@ -172,6 +170,7 @@ class CivilRegistryHandler(SimpleHTTPRequestHandler):
         with get_db() as conn:
             cur = conn.cursor()
             
+            # Get person with all lookup data in single optimized query
             cur.execute('''
                 SELECT l.*, s.Seksi, g.GjCivile, k.Kombesia, q.Qyteti, li.LidhjaKryef
                 FROM tblLista l
@@ -187,10 +186,12 @@ class CivilRegistryHandler(SimpleHTTPRequestHandler):
             if not row:
                 return {'error': 'Person not found'}
             
+            # Build person dict efficiently
             person = {key: (row[key] if row[key] is not None else '') for key in row.keys()}
             
             kryef_id = row['KryefId']
             
+            # Get family members with KryefId index lookup
             if kryef_id:
                 cur.execute('''
                     SELECT l.Id, l.Emer, l.Mbiemer, l.Atesi, l.Amesi, li.LidhjaKryef as Lidhja
@@ -203,12 +204,17 @@ class CivilRegistryHandler(SimpleHTTPRequestHandler):
             else:
                 person['family'] = []
             
+            # Use person's own Atesi/Amesi fields for birth parents
+            # These contain the actual biological parents from birth records
             atesi_name = row['Atesi'] or ''
             amesi_name = row['Amesi'] or ''
             
+            # Father: find person matching Atesi name
+            # Look for IdLidhja=1 (Kryefamiljar) with matching name first, then any match
             person['father'] = None
             person['father_name'] = atesi_name
             if atesi_name:
+                # Try to find clickable father by name in same family
                 cur.execute('''
                     SELECT Id, Emer, Mbiemer, Atesi, Amesi FROM tblLista
                     WHERE KryefId = ? AND IdLidhja = 1
@@ -224,9 +230,12 @@ class CivilRegistryHandler(SimpleHTTPRequestHandler):
                         'amesi': head['Amesi'] or ''
                     }
             
+            # Mother: find person matching Amesi name
+            # Look for spouse (IdLidhja=2) with matching name, OR parent records (IdLidhja=28/29)
             person['mother'] = None
             person['mother_name'] = amesi_name
             if amesi_name:
+                # Check if spouse has matching name (she would be the mother)
                 cur.execute('''
                     SELECT Id, Emer, Mbiemer, Atesi, Amesi FROM tblLista
                     WHERE KryefId = ? AND IdLidhja = 2
@@ -241,6 +250,7 @@ class CivilRegistryHandler(SimpleHTTPRequestHandler):
                         'atesi': spouse['Atesi'] or '',
                         'amesi': spouse['Amesi'] or ''
                     }
+                # Also check for parent records (IdLidhja=29 = E ëma / Mother)
                 elif not person['mother']:
                     cur.execute('''
                         SELECT Id, Emer, Mbiemer, Atesi, Amesi FROM tblLista
@@ -317,16 +327,17 @@ class CivilRegistryHandler(SimpleHTTPRequestHandler):
             self.send_error(404)
 
 def run(port=8080):
+    # Pre-warm the connection
     ConnectionManager.get_connection()
     
-    server = HTTPServer(('0.0.0.0', port), CivilRegistryHandler)
-    print(f"Server started at http://0.0.0.0:{port}")
+    server = HTTPServer(('127.0.0.1', port), CivilRegistryHandler)
+    print(f"Server started at http://127.0.0.1:{port}")
     print("Database optimizations: WAL mode, 64MB cache, memory-mapped I/O")
+    print("Press Ctrl+C to stop")
     try:
         server.serve_forever()
     finally:
         ConnectionManager.close()
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8080))
-    run(port)
+    run()
