@@ -6,7 +6,7 @@ DB_URL="${DB_URL:-https://github.com/DeFrag01/GjendjaCiv2008Remake/releases/down
 
 if [ ! -f "$DB_FILE" ]; then
     echo "Downloading database..."
-    curl -sL --retry 3 --retry-delay 5 "$DB_URL" -o "$DB_GZ" && {
+    curl -L --connect-timeout 10 --max-time 120 -H "User-Agent: Mozilla/5.0" --retry 2 --retry-delay 5 "$DB_URL" -o "$DB_GZ" && {
         gunzip "$DB_GZ"
         echo "Database ready."
     } || echo "Download failed, server will start without DB."
