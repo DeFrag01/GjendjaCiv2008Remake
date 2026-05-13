@@ -327,17 +327,13 @@ class CivilRegistryHandler(SimpleHTTPRequestHandler):
             self.send_error(404)
 
 def run(port=8080):
-    # Pre-warm the connection
-    ConnectionManager.get_connection()
-    
-    server = HTTPServer(('127.0.0.1', port), CivilRegistryHandler)
-    print(f"Server started at http://127.0.0.1:{port}")
-    print("Database optimizations: WAL mode, 64MB cache, memory-mapped I/O")
-    print("Press Ctrl+C to stop")
+    server = HTTPServer(('0.0.0.0', port), CivilRegistryHandler)
+    print(f"Server started on port {port}")
     try:
         server.serve_forever()
     finally:
         ConnectionManager.close()
 
 if __name__ == '__main__':
-    run()
+    port = int(os.environ.get('PORT', 8080))
+    run(port)
