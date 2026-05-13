@@ -10,7 +10,7 @@ import json
 from urllib.parse import urlparse, parse_qs
 from contextlib import contextmanager
 
-DB_FILE = "/run/media/defrag01/944CA94F4CA92D44/Users/DeFrag01/Documents/Gjendja Civile 2008/civil_registry_clean.db"
+DB_FILE = os.environ.get('DB_PATH', 'civil_registry_clean.db')
 
 # Singleton connection with proper SQLite patterns
 class ConnectionManager:
