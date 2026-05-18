@@ -137,26 +137,26 @@ body{
 .table-wrap{border:1px solid var(--border);overflow:hidden}
 .table{width:100%;border-collapse:collapse}
 .table th{
-  text-align:left;padding:10px var(--space-md);
+  text-align:left;padding:8px var(--space-md);
   font-size:11px;font-weight:500;
   text-transform:uppercase;letter-spacing:.06em;
   color:var(--text-muted);background:var(--bg-subtle);
-  border-bottom:1px solid var(--border)
+  border-bottom:1px solid var(--border);
+  white-space:nowrap
 }
 .table td{
-  padding:14px var(--space-md);
+  padding:10px var(--space-md);
   border-bottom:1px solid var(--border);
-  vertical-align:top;font-size:14px
+  vertical-align:middle;font-size:14px
 }
 .table tbody tr{cursor:pointer;transition:background .12s}
 .table tbody tr:last-child td{border-bottom:none}
 .table tbody tr:hover{background:var(--blue-light)}
-.person-name{font-weight:500;font-size:15px;margin-bottom:2px}
-.person-id{font-family:var(--font-mono);font-size:11px;color:var(--text-muted)}
-.parents{font-size:13px;color:var(--text-secondary);line-height:1.5}
-.parents span{color:var(--text)}
-.date{font-size:13px;color:var(--text-secondary)}
-.location{font-size:13px;color:var(--text-secondary)}
+.person-name{font-weight:500;font-size:15px}
+.person-id{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-top:1px}
+.row-meta{font-size:13px;color:var(--text-secondary);line-height:1.4}
+.row-meta strong{color:var(--text);font-weight:500}
+.row-meta .sep{color:var(--border);margin:0 6px}
 .tag{
   display:inline-block;padding:1px 8px;font-size:10px;
   font-weight:500;text-transform:uppercase;
@@ -281,8 +281,7 @@ body{
   .stats{grid-template-columns:1fr;max-width:none}
   .main{padding:var(--space-xl) var(--space-md) var(--space-2xl)}
   .search-row{grid-template-columns:1fr}
-  .table th:nth-child(3),.table td:nth-child(3),
-  .table th:nth-child(5),.table td:nth-child(5){display:none}
+  .table th:nth-child(4),.table td:nth-child(4){display:none}
   .detail-grid{grid-template-columns:1fr}
   .detail-item:nth-last-child(-n+2){border-bottom:1px solid var(--border)}
   .detail-item:last-child{border-bottom:none}
@@ -406,14 +405,16 @@ function renderResults(r){
   rd.innerHTML=`
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Emri</th><th>Prind&euml;rit</th><th>Lindja</th><th>Gjendja</th><th>Qyteti</th></tr></thead>
+        <thead><tr><th>Emri</th><th>At&euml;</th><th>Lindja / Qyteti</th><th>Gjendja</th></tr></thead>
         <tbody>${r.map(p=>`
           <tr onclick="showPerson(${p.id})">
-            <td><div class="person-name">${p.emer||''} ${p.mbiemer||''}</div><div class="person-id">ID: ${p.kryefId||'&mdash;'}</div></td>
-            <td class="parents">At&euml;: <span>${p.atesi||'&mdash;'}</span><br>N&euml;n&euml;: <span>${p.amesi||'&mdash;'}</span></td>
-            <td class="date">${formatDate(p.dtlindja)}</td>
+            <td>
+              <div class="person-name">${p.emer||''} ${p.mbiemer||''}</div>
+              <div class="person-id">${p.kryefId||'&mdash;'}</div>
+            </td>
+            <td class="row-meta"><strong>${p.atesi||'&mdash;'}</strong></td>
+            <td class="row-meta">${formatDate(p.dtlindja)}<span class="sep">|</span>${p.qyteti||'&mdash;'}</td>
             <td>${tagHtml(p.seksi)} ${tagHtml(p.gjCivile)}</td>
-            <td class="location">${p.qyteti||'&mdash;'}</td>
           </tr>`).join('')}</tbody>
       </table>
     </div>`
